@@ -17,12 +17,13 @@ var (
 	WotcEventListUrl = "https://www.wizards.com/handlers/XMLListService.ashx?dir=mtgo&type=XMLFileInfo&start=%v"
 	WotcEventPageUrl = "https://www.wizards.com/Magic/Digital/MagicOnlineTourn.aspx?x=mtg/digital/magiconline/tourn/%v"
 	WotcDeckUrl = "https://www.wizards.com/magic/.dek?x=mtg/digital/magiconline/tourn/%v&decknum=%v"
-	DeckHeaderReg, _ = regexp.Compile(`<heading>(\S+) \((.+)\)</heading>`)	
+	DeckHeaderReg, _ = regexp.Compile(`<heading>(.+) \((.+)\)</heading>`)	
 	CardListReg, _ = regexp.Compile(`(\d+) (.+)`)
 	EventDateReg, _ = regexp.Compile(`(\d+)/(\d+)`)
 )
 
 func GetPageContent(url string) ([]byte, error) {
+	//fmt.Println(url)
 	resp, getErr := http.Get(url)
 	if getErr != nil {
 		fmt.Println("error retrieving page" + getErr.Error())
@@ -85,7 +86,7 @@ func GetDeckHeaders(eventID string) ([]*Deck) {
 	body, _ := GetPageContent(fmt.Sprintf(WotcEventPageUrl, eventID))
 	
 	headers := DeckHeaderReg.FindAllStringSubmatch(string(body), -1)
-	fmt.Printf("Event %v found %v deck headers\n", eventID, len(headers))
+	//fmt.Printf("Event %v found %v deck headers\n", eventID, len(headers))
 	decks := make([]*Deck, 0, len(headers))
 	for _, match := range headers {
 		if len(match) == 3 {
@@ -174,7 +175,7 @@ func WriteEventToDisk(ev *Event) {
 	dirPath := filepath.Join("events", ev.Format)
 	CreateDirIfNecessary(dirPath)
 	filename := filepath.Join(dirPath, ev.EventID)
-	fmt.Println("Saving to ", filename)
+	//fmt.Println("Saving to ", filename)
 	serialized, jsonErr := json.MarshalIndent(ev, "", "\t")
 	if jsonErr != nil {
 		fmt.Println("event serialization failed: ", jsonErr.Error())
