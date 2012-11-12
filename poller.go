@@ -20,7 +20,40 @@ var (
 	DeckHeaderReg, _ = regexp.Compile(`<heading>(.+) \((.+)\)</heading>`)	
 	CardListReg, _ = regexp.Compile(`(\d+) (.+)`)
 	EventDateReg, _ = regexp.Compile(`(\d+)/(\d+)`)
+	PollEvery = 5 * time.Minute
 )
+
+func PollEvents() (chan *Event) {
+	output := make(chan *Event)
+	go func() {
+		knownEvents := make(map[string] bool)	
+
+		//fmt.Println("Reading events from disk")
+		for ev := range LoadEventsFromDisk() {
+			knownEvents[ev.EventID] = true
+			output <- ev
+		}
+
+		
+		poll := time.Tick(PollEvery)
+		for {
+			select {
+			case <- poll:
+				//fmt.Println("Reading events from web")
+				for _, ev := range GetNewEvents(knownEvents, 1) {
+					WriteEventToDisk(ev)
+					knownEvents[ev.EventID] = true
+					output <- ev
+				}
+			}
+		}
+
+		//should never get here
+		fmt.Println("Polls closing")
+		close(output)
+	}()
+	return output
+}
 
 func GetPageContent(url string) ([]byte, error) {
 	//fmt.Println(url)
@@ -188,16 +221,47 @@ func WriteEventToDisk(ev *Event) {
 	}
 }
 
-func LoadEventsFromDisk() ([]*Event) {
-	return nil
+func LoadEventsFromDisk() (chan *Event) {
+	events := make(chan *Event)
+
+	f := func(path string, info os.FileInfo, err error) (error) {
+		if !info.IsDir() {
+			ev := LoadEventFile(path)
+			events <- ev
+		}
+		return nil
+	}
+	go func() {
+		filepath.Walk("events", filepath.WalkFunc(f))
+		close(events)
+	}()
+	return events
 }
 
-func main() {
-	fmt.Println("starting")
-	knownEvents := make(map[string] bool)
-	events := GetNewEvents(knownEvents, 1)
-	fmt.Printf("new events: %v", len(events))
-	for _, ev := range events {
-		WriteEventToDisk(ev)
+func LoadEventFile(path string) (*Event) {
+	f, openErr := os.Open(path)
+	if openErr != nil {
+		fmt.Println("Error opening file ", path)
+		return nil
 	}
+	defer f.Close()
+
+	contents, readErr := ioutil.ReadAll(f)
+	if readErr != nil {
+		fmt.Println("Error reading from file ", path)
+		return nil
+	}
+
+	return ParseEventFile(contents)
 }
+
+func ParseEventFile(contents []byte) (*Event) {
+	var ev Event
+	parseErr := json.Unmarshal(contents, &ev)
+	if parseErr != nil {
+		fmt.Println("Failed to parse event file")
+		return nil
+	}
+	return &ev
+}
+
